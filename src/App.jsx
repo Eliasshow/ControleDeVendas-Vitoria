@@ -48,7 +48,6 @@ export default function App() {
     if (session) {
       fetchVendas();
       
-      // Sincronização em Tempo Real (Realtime)
       const subscription = supabase
         .channel('vendas-realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'vendas' }, (payload) => {
@@ -56,11 +55,19 @@ export default function App() {
         })
         .subscribe();
 
-      // MANTEMOS O FOCO E ADICIONAMOS O TEMPORIZADOR
+      // 1. Atualiza ao focar na janela
       const handleFocus = () => fetchVendas();
       window.addEventListener('focus', handleFocus);
       
-      // Batimento cardíaco: força atualização a cada 10 segundos
+      // 2. Atualiza instantaneamente ao trocar de aba (visibilitychange)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          fetchVendas();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      // 3. Batimento cardíaco ajustado
       const interval = setInterval(() => {
         fetchVendas();
       }, 10000); 
@@ -68,7 +75,8 @@ export default function App() {
       return () => {
         supabase.removeChannel(subscription);
         window.removeEventListener('focus', handleFocus);
-        clearInterval(interval); // Limpa o temporizador ao sair
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        clearInterval(interval);
       };
     }
   }, [session]);
