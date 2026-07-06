@@ -55,7 +55,14 @@ export default function App() {
         })
         .subscribe();
 
-      return () => supabase.removeChannel(subscription);
+      // Adiciona o ouvinte para atualizar ao focar na aba
+      const handleFocus = () => fetchVendas();
+      window.addEventListener('focus', handleFocus);
+
+      return () => {
+        supabase.removeChannel(subscription);
+        window.removeEventListener('focus', handleFocus);
+      };
     }
   }, [session]);
 
