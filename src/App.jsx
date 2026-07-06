@@ -47,6 +47,7 @@ export default function App() {
   useEffect(() => {
     if (session) {
       fetchVendas();
+      
       // Sincronização em Tempo Real (Realtime)
       const subscription = supabase
         .channel('vendas-realtime')
@@ -55,13 +56,19 @@ export default function App() {
         })
         .subscribe();
 
-      // Adiciona o ouvinte para atualizar ao focar na aba
+      // MANTEMOS O FOCO E ADICIONAMOS O TEMPORIZADOR
       const handleFocus = () => fetchVendas();
       window.addEventListener('focus', handleFocus);
+      
+      // Batimento cardíaco: força atualização a cada 10 segundos
+      const interval = setInterval(() => {
+        fetchVendas();
+      }, 10000); 
 
       return () => {
         supabase.removeChannel(subscription);
         window.removeEventListener('focus', handleFocus);
+        clearInterval(interval); // Limpa o temporizador ao sair
       };
     }
   }, [session]);
