@@ -1,0 +1,73 @@
+:root {
+  --primary-color: #1f4e79;
+  --secondary-color: #2c3e50;
+  --accent-color: #2980b9;
+  --background-color: #f4f6f9;
+  --card-bg-pago: #e2f0d9;
+  --card-bg-fiado: #fce4d6;
+  --card-bg-encomenda: #fff2cc;
+  --card-bg-lucro: #deebf7;
+  --border-color: #d9d9d9;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+body { background-color: var(--background-color); color: #333; padding: 20px; font-size: 14px; }
+.container { max-width: 1400px; margin: 0 auto; }
+
+header {
+  background-color: var(--primary-color); color: white; padding: 15px 20px;
+  border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;
+}
+
+button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; color: white; transition: background-color 0.2s; }
+.btn-primary { background-color: #2980b9; }
+.btn-primary:hover { background-color: #1f6391; }
+.btn-success { background-color: #27ae60; }
+.btn-danger { background-color: #c0392b; }
+.btn-secondary { background-color: #7f8c8d; }
+.btn-sm { padding: 4px 8px; font-size: 0.8rem; }
+.w-100 { width: 100%; }
+
+.dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
+.card { background-color: white; padding: 15px; border-radius: 8px; border-left: 5px solid var(--primary-color); display: flex; flex-direction: column; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.card .title { font-size: 0.85rem; text-transform: uppercase; color: #7f8c8d; font-weight: bold; margin-bottom: 5px; }
+.card .value { font-size: 1.4rem; font-weight: 700; color: var(--secondary-color); }
+.card.caixa { border-left-color: #27ae60; background-color: var(--card-bg-pago); }
+.card.fiado { border-left-color: #c0392b; background-color: var(--card-bg-fiado); }
+.card.encomenda { border-left-color: #f39c12; background-color: var(--card-bg-encomenda); }
+.card.lucro { border-left-color: var(--accent-color); background-color: var(--card-bg-lucro); }
+.card.extra { border-left-color: #9b59b6; background-color: #f3e5f5; }
+
+.main-layout { display: grid; grid-template-columns: 350px 1fr; gap: 20px; }
+@media (max-width: 1024px) { .main-layout { grid-template-columns: 1fr; } }
+
+.form-section, .table-section { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); height: fit-content; }
+.form-section h2, .table-section h2 { font-size: 1.1rem; margin-bottom: 15px; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 5px; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; margin-bottom: 4px; font-weight: 600; color: #555; }
+.form-control { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 4px; outline: none; font-size: 0.9rem; }
+.form-control:disabled { background-color: #eaeded; color: #7f8c8d; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-buttons { display: flex; gap: 10px; margin-top: 15px; }
+.form-buttons button { flex: 1; }
+
+.table-wrapper { overflow-x: auto; max-height: 500px; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+th { background-color: #f2f2f2; color: var(--secondary-color); font-weight: 700; position: sticky; top: 0; }
+tr:hover { background-color: #f9f9f9; }
+
+.badge { padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; display: inline-block; }
+.badge-pago { background-color: #c6efce; color: #006100; }
+.badge-fiado { background-color: #ffc7ce; color: #9c0006; }
+.badge-encomenda { background-color: #ffeb9c; color: #9c6500; }
+.actions-cell { display: flex; gap: 5px; }
+.font-bold { font-weight: 600; }
+.bg-lucro { background-color: var(--card-bg-lucro); }
+
+/* TELA DE LOGIN */
+.login-container { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: var(--background-color); }
+.login-form { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+.login-form h2 { margin-bottom: 20px; text-align: center; color: var(--primary-color); }
+.login-form input { margin-bottom: 15px; }
+.error-msg { color: #c0392b; font-size: 0.9rem; margin-bottom: 15px; text-align: center; }
