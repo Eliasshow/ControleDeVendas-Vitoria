@@ -16,12 +16,12 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'https://cdn-icons-png.flaticon.com/512/3141/3141113.png',
+            src: '/logo.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'https://cdn-icons-png.flaticon.com/512/3141/3141113.png',
+            src: '/logo.png',
             sizes: '512x512',
             type: 'image/png'
           }
