@@ -11,7 +11,7 @@ export default defineConfig({
         name: 'Controle de Vendas Vitória',
         short_name: 'Vendas Vitória',
         description: 'Sistema financeiro de vendas da família',
-        theme_color: '#1f4e79',
+        theme_color: '#2c3e50',
         background_color: '#f4f6f9',
         display: 'standalone',
         icons: [
