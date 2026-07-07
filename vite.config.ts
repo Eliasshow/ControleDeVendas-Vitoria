@@ -8,8 +8,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Controle de Vendas',
-        short_name: 'VendasApp',
+        name: 'Controle de Vendas Vitória',
+        short_name: 'Vendas Vitória',
         description: 'Sistema financeiro de vendas da família',
         theme_color: '#1f4e79',
         background_color: '#f4f6f9',
