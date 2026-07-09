@@ -42,7 +42,8 @@ export default function App() {
   const [itemEditando, setItemEditando] = useState(null);
   const [formData, setFormData] = useState({
     cliente: '', dataVenda: new Date().toISOString().split('T')[0],
-    prodId: '', quantidade: 1, status: 'PAGO', dataPagamento: new Date().toISOString().split('T')[0], observacao: ''
+    prodId: '', quantidade: 1, status: 'PAGO', dataPagamento: new Date().toISOString().split('T')[0], observacao: '',
+    valorCobrado: '' // NOVO: Permite digitar o preço do combo/promoção
   });
 
   const [isProdutoModalOpen, setIsProdutoModalOpen] = useState(false);
@@ -91,18 +92,32 @@ export default function App() {
   // ==========================================
   // LÓGICA DE VENDAS E BAIXA DE ESTOQUE
   // ==========================================
-  const vals = (() => {
+  
+  // Função para pegar o valor padrão do produto (para ajudar como sugestão)
+  const getSugestaoValor = () => {
     const p = produtos.find(prod => prod.id.toString() === formData.prodId.toString());
-    if (!p) return { preco: 0, custo: 0, total: 0, pago: 0 };
     const qtd = parseInt(formData.quantidade) || 0;
-    const total = Number(p.preco) * qtd;
-    return { preco: p.preco, custo: p.custo, total, pago: formData.status === 'PAGO' ? total : 0 };
-  })();
+    return p ? (Number(p.preco) * qtd) : 0;
+  };
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     let newData = { ...formData, [name]: value };
+    
     if (name === 'status') newData.dataPagamento = value === 'PAGO' ? new Date().toISOString().split('T')[0] : null;
+    
+    // NOVO: Se mudar o produto ou a quantidade, o sistema recalcula e preenche o campo "valorCobrado" automaticamente
+    // (Mas como o campo é editável, o usuário pode apagar e escrever o preço da promoção depois)
+    if (name === 'prodId' || name === 'quantidade') {
+      const p = produtos.find(prod => prod.id.toString() === (name === 'prodId' ? value : formData.prodId).toString());
+      const qtd = parseInt(name === 'quantidade' ? value : formData.quantidade) || 0;
+      if (p) {
+        newData.valorCobrado = (Number(p.preco) * qtd).toFixed(2);
+      } else {
+        newData.valorCobrado = '';
+      }
+    }
+
     setFormData(newData);
   };
 
@@ -120,13 +135,14 @@ export default function App() {
 
     const p = produtos.find(prod => prod.id.toString() === formData.prodId.toString());
     const qtdVendida = parseInt(formData.quantidade);
+    const valorFinal = Number(formData.valorCobrado); // Puxa o valor que foi efetivamente digitado na tela (com ou sem desconto)
     
     const dbData = {
       cliente: clienteDigitado, data_venda: formData.dataVenda, prod_key: p.id.toString(), 
       produto_nome: p.nome, preco_unitario: p.preco, custo_unitario: p.custo,
-      quantidade: qtdVendida, valor_total: vals.total, valor_pago: vals.pago,
-      custo_total: Number(p.custo) * qtdVendida, status: formData.status,
-      data_pagamento: formData.dataPagamento || null, observacao: formData.observacao
+      quantidade: qtdVendida, valor_total: valorFinal, valor_pago: formData.status === 'PAGO' ? valorFinal : 0,
+      custo_total: Number(p.custo) * qtdVendida, // O custo é sagrado, multiplica pelo valor de estoque
+      status: formData.status, data_pagamento: formData.dataPagamento || null, observacao: formData.observacao
     };
 
     if (itemEditando) {
@@ -151,14 +167,15 @@ export default function App() {
       quantidade: v.quantidade,
       status: v.status,
       dataPagamento: v.data_pagamento ? v.data_pagamento.substring(0, 10) : new Date().toISOString().split('T')[0],
-      observacao: v.observacao || ''
+      observacao: v.observacao || '',
+      valorCobrado: v.valor_total // Preenche o campo com o valor salvo anteriormente
     });
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false); setItemEditando(null);
-    setFormData({ cliente: '', dataVenda: new Date().toISOString().split('T')[0], prodId: '', quantidade: 1, status: 'PAGO', dataPagamento: new Date().toISOString().split('T')[0], observacao: '' });
+    setFormData({ cliente: '', dataVenda: new Date().toISOString().split('T')[0], prodId: '', quantidade: 1, status: 'PAGO', dataPagamento: new Date().toISOString().split('T')[0], observacao: '', valorCobrado: '' });
   };
 
   const handleDelete = async (id) => {
@@ -257,9 +274,7 @@ export default function App() {
     return acc;
   }, {});
   
-  const dadosGraficoRaioX = Object.entries(produtosRaioX)
-    .map(([nome, total]) => ({ nome, total }))
-    .sort((a, b) => b.total - a.total);
+  const dadosGraficoRaioX = Object.entries(produtosRaioX).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
 
   return (
     <div className="container">
@@ -296,7 +311,7 @@ export default function App() {
             </div>
           )}
 
-          {/* BARRA DE FILTRO RESTAURADA */}
+          {/* BARRA DE FILTRO */}
           <div style={{ background: '#ffffff', padding: '15px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>
               Filtro de Período 
@@ -342,7 +357,6 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><h3 style={{ margin: 0 }}>{v.cliente}</h3><span className={`badge badge-${v.status.toLowerCase()}`}>{v.status}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 5px 0', color: '#666' }}><span>📅 {formatDateBR(v.data_venda)}</span><span>{v.produto_nome} (x{v.quantidade})</span></div>
                   
-                  {/* OBSERVAÇÃO RESTAURADA NA EXIBIÇÃO */}
                   {v.observacao && <p style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', margin: '0 0 10px 0' }}>Obs: {v.observacao}</p>}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #eee', paddingTop: '12px' }}>
@@ -371,6 +385,11 @@ export default function App() {
           <div className="historico-cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
             {produtos.map(p => {
               const estoqueCritico = p.estoque_atual <= p.estoque_minimo;
+              
+              // CÁLCULO DE MARGEM PARA O CARD
+              const lucroReais = p.preco - p.custo;
+              const margemLucro = p.preco > 0 ? (lucroReais / p.preco) * 100 : 0;
+
               return (
                 <div key={p.id} className="venda-card" style={{ background: 'white', borderRadius: '10px', padding: '15px', opacity: p.ativo ? 1 : 0.6, borderLeft: `5px solid ${p.ativo ? (estoqueCritico ? '#dc3545' : '#17a2b8') : '#6c757d'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -379,6 +398,13 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', color: '#555' }}>
                     <span>Preço: <strong>{formatCurrency(p.preco)}</strong></span><span>Custo: {formatCurrency(p.custo)}</span>
                   </div>
+                  
+                  {/* NOVO: RAIO-X DE LUCRO DIRETO NO PRODUTO */}
+                  <div style={{ background: '#f1f8ff', padding: '10px', borderRadius: '6px', marginTop: '10px', border: '1px solid #cce5ff', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Lucro Padrão: <strong>{formatCurrency(lucroReais)}</strong></span>
+                    <span style={{ color: '#0056b3', fontWeight: 'bold' }}>Margem: {margemLucro.toFixed(1)}%</span>
+                  </div>
+
                   <div style={{ marginTop: '10px', padding: '8px', borderRadius: '6px', background: estoqueCritico ? '#f8d7da' : '#d4edda', color: estoqueCritico ? '#721c24' : '#155724', fontWeight: 'bold', textAlign: 'center' }}>
                     Estoque Atual: {p.estoque_atual} {estoqueCritico && '⚠️'}
                   </div>
@@ -545,13 +571,18 @@ export default function App() {
               </div>
               <div className="form-row">
                 <div className="form-group"><label>Quantidade</label><input type="number" name="quantidade" className="form-control" min="1" value={formData.quantidade} onChange={handleFormChange} required /></div>
-                <div className="form-group"><label>Total (R$)</label><input type="text" className="form-control font-bold" disabled value={formatCurrency(vals.total)} /></div>
+                
+                {/* CAMPO TOTAL LIVRE (DESTACADO) */}
+                <div className="form-group">
+                  <label>Total Final (R$)</label>
+                  <input type="number" step="0.01" name="valorCobrado" className="form-control font-bold" style={{ borderColor: '#007bff' }} value={formData.valorCobrado} onChange={handleFormChange} required />
+                  <small style={{color: '#888'}}>Sugestão: {formatCurrency(getSugestaoValor())}</small>
+                </div>
               </div>
               
-              {/* CAMPO DE OBSERVAÇÃO RESTAURADO AQUI */}
               <div className="form-group">
                 <label>Observação (Opcional)</label>
-                <input type="text" name="observacao" className="form-control" placeholder="Tamanho, cor, detalhe de entrega..." value={formData.observacao} onChange={handleFormChange} />
+                <input type="text" name="observacao" className="form-control" placeholder="Tamanho, cor, combo 2x12..." value={formData.observacao} onChange={handleFormChange} />
               </div>
 
               <div className="form-buttons" style={{ display: 'flex', gap: '10px', marginTop: '20px' }}><button type="submit" className="btn-primary" style={{ flex: 1 }}>{itemEditando ? 'Salvar Edição' : 'Confirmar Venda'}</button></div>
