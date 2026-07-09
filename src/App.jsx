@@ -296,6 +296,29 @@ export default function App() {
             </div>
           )}
 
+          {/* BARRA DE FILTRO RESTAURADA */}
+          <div style={{ background: '#ffffff', padding: '15px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>
+              Filtro de Período 
+              {filtroFiadoAtrasado && <span style={{ color: '#dc3545', marginLeft: '10px' }}>- 🚨 Mostrando apenas devedores</span>}
+            </h4>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input type="date" className="form-control" style={{ width: 'auto' }} value={dataInicioFiltro} onChange={(e) => setDataInicioFiltro(e.target.value)} disabled={filtroFiadoAtrasado} />
+              <span style={{ fontWeight: 'bold' }}>até</span>
+              <input type="date" className="form-control" style={{ width: 'auto' }} value={dataFimFiltro} onChange={(e) => setDataFimFiltro(e.target.value)} disabled={filtroFiadoAtrasado} />
+              
+              <button className="btn btn-primary" onClick={() => setFiltroAtivo(true)} disabled={!dataInicioFiltro || !dataFimFiltro || filtroFiadoAtrasado}>
+                Filtrar
+              </button>
+              
+              {(filtroAtivo || filtroFiadoAtrasado) && (
+                <button className="btn btn-secondary" onClick={() => { setFiltroAtivo(false); setDataInicioFiltro(''); setDataFimFiltro(''); setFiltroFiadoAtrasado(false); }}>
+                  Limpar Filtros
+                </button>
+              )}
+            </div>
+          </div>
+
           <div style={{ marginBottom: '30px' }}>
             <h2 style={{ fontSize: '1.2rem', color: '#2c3e50', marginBottom: '15px', borderBottom: '2px solid #e9ecef', paddingBottom: '8px' }}>Visão Geral Financeira</h2>
             <div className="dashboard" style={{ marginBottom: '25px' }}>
@@ -317,7 +340,11 @@ export default function App() {
               {vendasFiltradas.map(v => (
                 <div key={v.id} className="venda-card" style={{ background: 'white', borderRadius: '10px', padding: '15px', borderLeft: `5px solid ${v.status === 'PAGO' ? '#28a745' : v.status === 'FIADO' ? '#dc3545' : '#ffc107'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><h3 style={{ margin: 0 }}>{v.cliente}</h3><span className={`badge badge-${v.status.toLowerCase()}`}>{v.status}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0', color: '#666' }}><span>📅 {formatDateBR(v.data_venda)}</span><span>{v.produto_nome} (x{v.quantidade})</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 5px 0', color: '#666' }}><span>📅 {formatDateBR(v.data_venda)}</span><span>{v.produto_nome} (x{v.quantidade})</span></div>
+                  
+                  {/* OBSERVAÇÃO RESTAURADA NA EXIBIÇÃO */}
+                  {v.observacao && <p style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', margin: '0 0 10px 0' }}>Obs: {v.observacao}</p>}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #eee', paddingTop: '12px' }}>
                     <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#1a1a1a' }}>{formatCurrency(v.valor_total)}</span>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -412,7 +439,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* --- RAIO-X DO CLIENTE COM CORREÇÃO DE MARGEM NO GRÁFICO --- */}
           <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
             <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>🔍 Raio-X por Cliente</h3>
             
@@ -437,7 +463,6 @@ export default function App() {
               </p>
             </div>
 
-            {/* GRÁFICO DO RAIO-X REESTRUTURADO (SEM CORTAR LETRAS) */}
             {dadosGraficoRaioX.length > 0 ? (
               <div style={{ width: '100%', height: 320 }}>
                 <h4 style={{ margin: '0 0 10px 0', color: '#555', fontSize: '1rem', textAlign: 'center' }}>Distribuição de Gastos do Cliente</h4>
@@ -472,7 +497,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* GRÁFICO TOP 5 REESTRUTURADO (SEM CORTAR LETRAS) */}
             <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
               <h3 style={{ margin: '0 0 20px 0', color: '#2c3e50', fontSize: '1.1rem' }}>🏆 Top 5 Produtos</h3>
               <div style={{ width: '100%', height: 320 }}>
@@ -523,6 +547,13 @@ export default function App() {
                 <div className="form-group"><label>Quantidade</label><input type="number" name="quantidade" className="form-control" min="1" value={formData.quantidade} onChange={handleFormChange} required /></div>
                 <div className="form-group"><label>Total (R$)</label><input type="text" className="form-control font-bold" disabled value={formatCurrency(vals.total)} /></div>
               </div>
+              
+              {/* CAMPO DE OBSERVAÇÃO RESTAURADO AQUI */}
+              <div className="form-group">
+                <label>Observação (Opcional)</label>
+                <input type="text" name="observacao" className="form-control" placeholder="Tamanho, cor, detalhe de entrega..." value={formData.observacao} onChange={handleFormChange} />
+              </div>
+
               <div className="form-buttons" style={{ display: 'flex', gap: '10px', marginTop: '20px' }}><button type="submit" className="btn-primary" style={{ flex: 1 }}>{itemEditando ? 'Salvar Edição' : 'Confirmar Venda'}</button></div>
             </form>
           </div>
