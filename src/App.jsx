@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { jsPDF } from 'jspdf';
 import './App.css';
 
 // --- FUNÇÕES DE FORMATAÇÃO ---
@@ -43,7 +44,7 @@ export default function App() {
   const [formData, setFormData] = useState({
     cliente: '', dataVenda: new Date().toISOString().split('T')[0],
     prodId: '', quantidade: 1, status: 'PAGO', dataPagamento: new Date().toISOString().split('T')[0], observacao: '',
-    valorCobrado: '' // NOVO: Permite digitar o preço do combo/promoção
+    valorCobrado: '' 
   });
 
   const [isProdutoModalOpen, setIsProdutoModalOpen] = useState(false);
@@ -92,8 +93,6 @@ export default function App() {
   // ==========================================
   // LÓGICA DE VENDAS E BAIXA DE ESTOQUE
   // ==========================================
-  
-  // Função para pegar o valor padrão do produto (para ajudar como sugestão)
   const getSugestaoValor = () => {
     const p = produtos.find(prod => prod.id.toString() === formData.prodId.toString());
     const qtd = parseInt(formData.quantidade) || 0;
@@ -103,21 +102,13 @@ export default function App() {
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     let newData = { ...formData, [name]: value };
-    
     if (name === 'status') newData.dataPagamento = value === 'PAGO' ? new Date().toISOString().split('T')[0] : null;
     
-    // NOVO: Se mudar o produto ou a quantidade, o sistema recalcula e preenche o campo "valorCobrado" automaticamente
-    // (Mas como o campo é editável, o usuário pode apagar e escrever o preço da promoção depois)
     if (name === 'prodId' || name === 'quantidade') {
       const p = produtos.find(prod => prod.id.toString() === (name === 'prodId' ? value : formData.prodId).toString());
       const qtd = parseInt(name === 'quantidade' ? value : formData.quantidade) || 0;
-      if (p) {
-        newData.valorCobrado = (Number(p.preco) * qtd).toFixed(2);
-      } else {
-        newData.valorCobrado = '';
-      }
+      if (p) { newData.valorCobrado = (Number(p.preco) * qtd).toFixed(2); } else { newData.valorCobrado = ''; }
     }
-
     setFormData(newData);
   };
 
@@ -135,14 +126,13 @@ export default function App() {
 
     const p = produtos.find(prod => prod.id.toString() === formData.prodId.toString());
     const qtdVendida = parseInt(formData.quantidade);
-    const valorFinal = Number(formData.valorCobrado); // Puxa o valor que foi efetivamente digitado na tela (com ou sem desconto)
+    const valorFinal = Number(formData.valorCobrado);
     
     const dbData = {
       cliente: clienteDigitado, data_venda: formData.dataVenda, prod_key: p.id.toString(), 
       produto_nome: p.nome, preco_unitario: p.preco, custo_unitario: p.custo,
       quantidade: qtdVendida, valor_total: valorFinal, valor_pago: formData.status === 'PAGO' ? valorFinal : 0,
-      custo_total: Number(p.custo) * qtdVendida, // O custo é sagrado, multiplica pelo valor de estoque
-      status: formData.status, data_pagamento: formData.dataPagamento || null, observacao: formData.observacao
+      custo_total: Number(p.custo) * qtdVendida, status: formData.status, data_pagamento: formData.dataPagamento || null, observacao: formData.observacao
     };
 
     if (itemEditando) {
@@ -168,7 +158,7 @@ export default function App() {
       status: v.status,
       dataPagamento: v.data_pagamento ? v.data_pagamento.substring(0, 10) : new Date().toISOString().split('T')[0],
       observacao: v.observacao || '',
-      valorCobrado: v.valor_total // Preenche o campo com o valor salvo anteriormente
+      valorCobrado: v.valor_total
     });
     setIsModalOpen(true);
   };
@@ -197,6 +187,154 @@ export default function App() {
   };
 
   // ==========================================
+  // RECIBO PDF PROFISSIONAL (À Prova de Falhas)
+  // ==========================================
+  const handleGerarRecibo = (venda) => {
+    try {
+      const doc = new jsPDF();
+      
+      // CABEÇALHO (Estilo Limpo e Profissional, sem depender de imagens externas)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(26);
+      doc.setTextColor(44, 62, 80);
+      doc.text("Vendas Vitória", 105, 25, null, null, "center");
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      doc.setTextColor(150, 150, 150);
+      doc.text("Recibo Digital de Compra", 105, 33, null, null, "center");
+
+      // LINHA SEPARADORA
+      doc.setDrawColor(220, 220, 220);
+      doc.line(20, 42, 190, 42);
+
+      // DADOS DO CLIENTE
+      doc.setTextColor(60, 60, 60);
+      doc.setFontSize(10);
+      doc.text("DADOS DO CLIENTE", 20, 55);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(venda.cliente, 20, 62);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text("DATA DA COMPRA", 130, 55);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(formatDateBR(venda.data_venda), 130, 62);
+
+      // CAIXA DE ITENS (ESTILO TABELA)
+      doc.setDrawColor(230, 230, 230);
+      doc.setFillColor(252, 252, 252);
+      doc.roundedRect(20, 75, 170, 35, 3, 3, 'FD'); // Retângulo com fundo claro
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text("DESCRIÇÃO DO PRODUTO / SERVIÇO", 25, 83);
+      doc.text("QTD", 140, 83);
+      doc.text("STATUS", 165, 83);
+      
+      doc.line(20, 87, 190, 87); // Linha interna
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(50, 50, 50);
+      doc.text(venda.produto_nome, 25, 98);
+      doc.text(`${venda.quantidade}x`, 140, 98);
+      
+      // Cor condicional para o Status no PDF
+      if (venda.status === 'PAGO') doc.setTextColor(40, 167, 69);
+      else if (venda.status === 'FIADO') doc.setTextColor(220, 53, 69);
+      else doc.setTextColor(255, 193, 7);
+      doc.text(venda.status, 165, 98);
+
+      // OBSERVAÇÃO
+      let yCaixaTotal = 120;
+      if (venda.observacao) {
+        doc.setTextColor(80, 80, 80);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "italic");
+        doc.text(`Observações: ${venda.observacao}`, 25, 107);
+      }
+
+      // CAIXA DO VALOR TOTAL
+      doc.setFillColor(240, 248, 255);
+      doc.roundedRect(20, yCaixaTotal, 170, 25, 3, 3, 'F');
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0);
+      doc.text(`VALOR TOTAL`, 25, yCaixaTotal + 16);
+      
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${formatCurrency(venda.valor_total)}`, 185, yCaixaTotal + 17, null, null, "right");
+
+      // RODAPÉ COM CARIMBO DE TEMPO
+      const dataHoraEmissao = new Date().toLocaleString('pt-BR');
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Documento gerado eletronicamente em: ${dataHoraEmissao}`, 105, 275, null, null, "center");
+      doc.text("Vendas Vitória - Gestão & Qualidade", 105, 280, null, null, "center");
+
+      // Salva o PDF
+      const nomeArquivo = `Recibo_${venda.cliente.replace(/\s+/g, '_')}_${venda.data_venda}.pdf`;
+      doc.save(nomeArquivo);
+      
+    } catch (err) {
+      console.error("Erro interno ao gerar o PDF:", err);
+      alert("Ocorreu um erro ao gerar o PDF. Verifique o console.");
+    }
+  };
+
+  // ==========================================
+  // LÓGICA DA RÉGUA DE FIDELIDADE
+  // ==========================================
+  const obterAlertasFidelidade = () => {
+    const hoje = new Date();
+    const alertas = [];
+
+    clientes.forEach(c => {
+      const vendasDoCliente = vendas.filter(v => v.cliente.toLowerCase() === c.nome.toLowerCase());
+      if (vendasDoCliente.length === 0) return;
+
+      const datas = vendasDoCliente.map(v => new Date(v.data_venda + 'T00:00:00'));
+      const ultimaData = new Date(Math.max(...datas));
+      const diffTempo = hoje - ultimaData;
+      const diffDias = Math.floor(diffTempo / (1000 * 60 * 60 * 24));
+
+      if (diffDias >= 45) {
+        const contagemProdutos = {};
+        vendasDoCliente.forEach(v => {
+          contagemProdutos[v.produto_nome] = (contagemProdutos[v.produto_nome] || 0) + Number(v.quantidade);
+        });
+
+        let produtoFavorito = '';
+        let maxQtd = 0;
+        for (const [nome, qtd] of Object.entries(contagemProdutos)) {
+          if (qtd > maxQtd) { maxQtd = qtd; produtoFavorito = nome; }
+        }
+
+        alertas.push({ id: c.id, nome: c.nome, telefone: c.telefone, diasSumido: diffDias, produtoFavorito, totalComprado: maxQtd });
+      }
+    });
+    return alertas;
+  };
+
+  const handleSugestaoFidelidadeWhats = (alerta) => {
+    const mensagem = `Olá *${alerta.nome}*, tudo bem? Saudades!\n\nPassando para saber como você está. Vi aqui no sistema que faz ${alerta.diasSumido} dias desde a sua última compra com a gente.\n\nLembrei que você gosta muito de *${alerta.produtoFavorito}* (já levou ${alerta.totalComprado} unidades no total!). Como chegaram novidades e reposições no estoque, pensei em te avisar em primeira mão para dar uma olhada e renovar o armário! \n\nSe quiser conferir, me avisa! 😉`;
+    let url = '';
+    if (alerta.telefone) {
+      const numeroLimpo = alerta.telefone.replace(/\D/g, '');
+      url = `https://wa.me/55${numeroLimpo}?text=${encodeURIComponent(mensagem)}`;
+    } else {
+      url = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
+    }
+    window.open(url, '_blank');
+  };
+
+  // ==========================================
   // LÓGICA DE PRODUTOS E CLIENTES
   // ==========================================
   const handleProdutoFormChange = (e) => { const { name, value, type, checked } = e.target; setFormProduto(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value })); };
@@ -206,7 +344,7 @@ export default function App() {
     if (produtoEditando) { await supabase.from('produtos').update(dbProd).eq('id', produtoEditando.id); } else { await supabase.from('produtos').insert([dbProd]); }
     await fetchProdutos(); handleCloseProdutoModal();
   };
-  const handleEditProduto = (p) => { setProdutoEditando(p); setFormProduto({ nome: p.nome, preco: p.preco, custo: p.custo, estoque_atual: p.estoque_atual, estoque_minimo: p.estoque_minimo, categoria: p.categoria || '', ativo: p.ativo }); setIsProdutoModalOpen(true); };
+  const handleEditProduto = (p) => { setProdutoEditando(p); setFormProduto({ nome: p.nome, preco: p.preco, custo: p.custo, estoque_atual: p.estoque_atual, estoque_minimo: p.estoque_minimo, category: p.categoria || '', ativo: p.ativo }); setIsProdutoModalOpen(true); };
   const handleToggleAtivo = async (p) => { await supabase.from('produtos').update({ ativo: !p.ativo }).eq('id', p.id); await fetchProdutos(); };
   const handleDeleteProduto = async (id) => { if (window.confirm("Atenção: Tem certeza que deseja excluir DE VEZ este produto?")) { await supabase.from('produtos').delete().eq('id', id); await fetchProdutos(); } };
   const handleCloseProdutoModal = () => { setIsProdutoModalOpen(false); setProdutoEditando(null); setFormProduto({ nome: '', preco: '', custo: '', estoque_atual: '', estoque_minimo: 5, categoria: '', ativo: true }); };
@@ -257,7 +395,6 @@ export default function App() {
   const faturamentoPorProduto = vendas.reduce((acc, v) => { acc[v.produto_nome] = (acc[v.produto_nome] || 0) + Number(v.valor_total); return acc; }, {});
   const dadosGraficoBarras = Object.entries(faturamentoPorProduto).map(([nome, faturamento]) => ({ nome, faturamento })).sort((a, b) => b.faturamento - a.faturamento).slice(0, 5);
 
-  // --- DADOS PARA O RAIO-X DE CLIENTE (BI) ---
   const vendasRaioX = vendas.filter(v => {
     let passaNome = true; let passaData = true;
     if (biClienteNome) passaNome = v.cliente.toLowerCase().includes(biClienteNome.toLowerCase());
@@ -268,13 +405,10 @@ export default function App() {
   
   const biTotalGasto = vendasRaioX.reduce((acc, v) => acc + Number(v.valor_total), 0);
   const biTotalItens = vendasRaioX.reduce((acc, v) => acc + Number(v.quantidade), 0);
-
-  const produtosRaioX = vendasRaioX.reduce((acc, v) => {
-    acc[v.produto_nome] = (acc[v.produto_nome] || 0) + Number(v.valor_total);
-    return acc;
-  }, {});
-  
+  const produtosRaioX = vendasRaioX.reduce((acc, v) => { acc[v.produto_nome] = (acc[v.produto_nome] || 0) + Number(v.valor_total); return acc; }, {});
   const dadosGraficoRaioX = Object.entries(produtosRaioX).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
+
+  const listaFidelidadeAlertas = obterAlertasFidelidade();
 
   return (
     <div className="container">
@@ -359,14 +493,31 @@ export default function App() {
                   
                   {v.observacao && <p style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', margin: '0 0 10px 0' }}>Obs: {v.observacao}</p>}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #eee', paddingTop: '12px' }}>
-                    <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#1a1a1a' }}>{formatCurrency(v.valor_total)}</span>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {v.status === 'FIADO' && (<button className="btn-sm" style={{ background: '#25D366', color: 'white', padding: '6px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer' }} onClick={() => handleCobrarWhatsApp(v)}>💬 Cobrar</button>)}
-                      <button className="btn-sm btn-primary" style={{ padding: '6px 10px', borderRadius: '6px' }} onClick={() => handleEdit(v)}>✏️</button>
-                      <button className="btn-sm btn-danger" style={{ padding: '6px 10px', borderRadius: '6px' }} onClick={() => handleDelete(v.id)}>🗑️</button>
+                  {/* BARRA DE AÇÕES COM DESIGN LIMPO E ESPAÇADO */}
+                  <div style={{ borderTop: '1px solid #eee', paddingTop: '12px', marginTop: '10px' }}>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '0.9rem', color: '#666' }}>Valor Total</span>
+                      <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#1a1a1a' }}>{formatCurrency(v.valor_total)}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-end' }}>
+                      
+                      <button className="btn-sm" style={{ flex: '1 1 auto', background: '#f8f9fa', color: '#333', border: '1px solid #ddd', padding: '8px', borderRadius: '6px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }} onClick={() => handleGerarRecibo(v)}>
+                        🖨️ Recibo
+                      </button>
+
+                      {v.status === 'FIADO' && (
+                        <button className="btn-sm" style={{ flex: '1 1 auto', background: '#25D366', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }} onClick={() => handleCobrarWhatsApp(v)}>
+                          💬 Cobrar
+                        </button>
+                      )}
+
+                      <button className="btn-sm" style={{ flex: '0 1 auto', background: '#e9ecef', color: '#333', border: 'none', padding: '8px 15px', borderRadius: '6px' }} onClick={() => handleEdit(v)} title="Editar Venda">✏️</button>
+                      <button className="btn-sm" style={{ flex: '0 1 auto', background: '#fee2e2', color: '#dc3545', border: 'none', padding: '8px 15px', borderRadius: '6px' }} onClick={() => handleDelete(v.id)} title="Apagar Venda">🗑️</button>
                     </div>
                   </div>
+
                 </div>
               ))}
             </div>
@@ -385,8 +536,6 @@ export default function App() {
           <div className="historico-cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
             {produtos.map(p => {
               const estoqueCritico = p.estoque_atual <= p.estoque_minimo;
-              
-              // CÁLCULO DE MARGEM PARA O CARD
               const lucroReais = p.preco - p.custo;
               const margemLucro = p.preco > 0 ? (lucroReais / p.preco) * 100 : 0;
 
@@ -399,7 +548,6 @@ export default function App() {
                     <span>Preço: <strong>{formatCurrency(p.preco)}</strong></span><span>Custo: {formatCurrency(p.custo)}</span>
                   </div>
                   
-                  {/* NOVO: RAIO-X DE LUCRO DIRETO NO PRODUTO */}
                   <div style={{ background: '#f1f8ff', padding: '10px', borderRadius: '6px', marginTop: '10px', border: '1px solid #cce5ff', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between' }}>
                     <span>Lucro Padrão: <strong>{formatCurrency(lucroReais)}</strong></span>
                     <span style={{ color: '#0056b3', fontWeight: 'bold' }}>Margem: {margemLucro.toFixed(1)}%</span>
@@ -425,10 +573,38 @@ export default function App() {
       {/* ======================= PÁGINA 3: CLIENTES ======================= */}
       {paginaAtual === 'clientes' && (
         <div style={{ marginBottom: '100px' }}>
+          
+          <div style={{ background: '#fff3cd', color: '#856404', padding: '20px', borderRadius: '12px', marginBottom: '30px', borderLeft: '6px solid #ffc107', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ margin: '0 0 5px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>🎯 Alertas de Mini-Marketing (Fidelidade)</h3>
+            <p style={{ margin: '0 0 15px 0', fontSize: '0.95rem', color: '#665214' }}>Clientes sumidos há mais de 45 dias. O sistema cruzou o histórico e já sugere o produto que eles mais adoram para renovar o estoque pessoal!</p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '12px' }}>
+              {listaFidelidadeAlertas.length === 0 ? (
+                <p style={{ fontStyle: 'italic', margin: 0, color: '#856404' }}>Nenhum cliente sumido por mais de 45 dias. Excelente engajamento!</p>
+              ) : (
+                listaFidelidadeAlertas.map(alerta => (
+                  <div key={alerta.id} style={{ background: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #ffeeba', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <strong style={{ color: '#333', fontSize: '1.05rem' }}>{alerta.nome}</strong>
+                      <div style={{ fontSize: '0.85rem', color: '#721c24', fontWeight: 'bold', margin: '3px 0' }}>⚠️ Sumido(a) há {alerta.diasSumido} dias</div>
+                      <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#555' }}>
+                        Item de Afinidade: <span style={{ background: '#e2f0d9', color: '#385723', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>{alerta.produtoFavorito}</span> <small>({alerta.totalComprado} un)</small>
+                      </p>
+                    </div>
+                    <button onClick={() => handleSugestaoFidelidadeWhats(alerta)} style={{ background: '#ffc107', color: '#333', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px', width: '100%' }}>
+                      💡 Sugerir {alerta.produtoFavorito}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-            <h2 style={{ color: '#2c3e50', margin: 0 }}>👥 Cadastro de Clientes</h2>
+            <h2 style={{ color: '#2c3e50', margin: 0 }}>👥 Lista Geral de Clientes</h2>
             <button className="btn btn-primary" onClick={() => setIsClienteModalOpen(true)}>+ Novo Cliente</button>
           </div>
+          
           <div className="historico-cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
             {clientes.length === 0 ? <p style={{ color: '#666' }}>Nenhum cliente cadastrado ainda. Salve uma venda ou clique acima para adicionar.</p> : null}
             {clientes.map(c => (
@@ -572,7 +748,6 @@ export default function App() {
               <div className="form-row">
                 <div className="form-group"><label>Quantidade</label><input type="number" name="quantidade" className="form-control" min="1" value={formData.quantidade} onChange={handleFormChange} required /></div>
                 
-                {/* CAMPO TOTAL LIVRE (DESTACADO) */}
                 <div className="form-group">
                   <label>Total Final (R$)</label>
                   <input type="number" step="0.01" name="valorCobrado" className="form-control font-bold" style={{ borderColor: '#007bff' }} value={formData.valorCobrado} onChange={handleFormChange} required />
