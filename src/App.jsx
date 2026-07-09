@@ -12,6 +12,23 @@ const formatDateBR = (dateString) => {
   return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : dateString;
 };
 
+// --- TRADUTOR DE IMAGEM PARA O PDF ---
+const carregarImagemBase64 = async (url) => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error("Não foi possível carregar a logo.", error);
+    return null;
+  }
+};
+
 export default function App() {
   // --- ESTADOS GERAIS DO SISTEMA ---
   const [session, setSession] = useState(null);
@@ -187,22 +204,33 @@ export default function App() {
   };
 
   // ==========================================
-  // RECIBO PDF PROFISSIONAL (À Prova de Falhas)
+  // RECIBO PDF PROFISSIONAL (COM LOGO)
   // ==========================================
-  const handleGerarRecibo = (venda) => {
+  const handleGerarRecibo = async (venda) => {
     try {
       const doc = new jsPDF();
       
-      // CABEÇALHO (Estilo Limpo e Profissional, sem depender de imagens externas)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(26);
-      doc.setTextColor(44, 62, 80);
-      doc.text("Vendas Vitória", 105, 25, null, null, "center");
+      // Busca a imagem convertida
+      const logoBase64 = await carregarImagemBase64('/logo.png');
+
+      // CABEÇALHO COM OU SEM LOGO
+      if (logoBase64) {
+        doc.addImage(logoBase64, 'PNG', 20, 15, 18, 18);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(24);
+        doc.setTextColor(44, 62, 80);
+        doc.text("Vendas Vitória", 45, 27);
+      } else {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(26);
+        doc.setTextColor(44, 62, 80);
+        doc.text("Vendas Vitória", 105, 25, null, null, "center");
+      }
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(12);
       doc.setTextColor(150, 150, 150);
-      doc.text("Recibo Digital de Compra", 105, 33, null, null, "center");
+      doc.text("Recibo Digital de Compra", logoBase64 ? 45 : 105, logoBase64 ? 33 : 33, null, null, logoBase64 ? "left" : "center");
 
       // LINHA SEPARADORA
       doc.setDrawColor(220, 220, 220);
