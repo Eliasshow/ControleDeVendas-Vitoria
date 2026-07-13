@@ -75,10 +75,22 @@ export default function App() {
   const [clienteEditando, setClienteEditando] = useState(null);
   const [formCliente, setFormCliente] = useState({ nome: '', telefone: '' });
 
+  // --- ESTADOS DA VITRINE (ESTILO INVERNAL) ---
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [cart, setCart] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState(1); 
+  const [tamanhosSelecionados, setTamanhosSelecionados] = useState({});
+  const [formCheckout, setFormCheckout] = useState({
+    nome: '', whatsapp: '', tipo: 'Entrega', andar: '01', setor: '', observacao: ''
+  });
+
   // --- AUTENTICAÇÃO E TEMPO REAL ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    fetchProdutos(); // Garante que os produtos carreguem na vitrine antes mesmo do login
   }, []);
 
   useEffect(() => {
@@ -391,7 +403,286 @@ export default function App() {
   const handleCloseClienteModal = () => { setIsClienteModalOpen(false); setClienteEditando(null); setFormCliente({ nome: '', telefone: '' }); };
 
   // ==========================================
-  // INDICADORES GERAIS E CÁLCULOS
+  // LÓGICA E RENDERIZAÇÃO DA VITRINE (CLIENTE)
+  // ==========================================
+  const determinarTamanhos = (nomeProduto) => {
+    const nome = nomeProduto.toLowerCase();
+    if (nome.includes('translúcida') || nome.includes('translucida')) return ['Único', 'Plus'];
+    if (nome.includes('ceroula')) return ['P/M', 'G/GG'];
+    return ['Único'];
+  };
+
+  const handleAddToCart = (produto) => {
+    const tamanho = tamanhosSelecionados[produto.id] || determinarTamanhos(produto.nome)[0];
+    const existing = cart.find(item => item.produto.id === produto.id && item.tamanho === tamanho);
+    if (existing) {
+      setCart(cart.map(item => item === existing ? { ...item, quantidade: item.quantidade + 1 } : item));
+    } else {
+      setCart([...cart, { produto, tamanho, quantidade: 1 }]);
+    }
+    setIsCartOpen(true);
+  };
+
+  const cartTotal = cart.reduce((acc, item) => acc + (item.produto.preco * item.quantidade), 0);
+
+  const handleCheckoutChange = (e) => {
+    const { name, value } = e.target;
+    setFormCheckout(prev => ({ ...prev, [name]: value }));
+  };
+
+  const finalizarPedidoVitrine = async () => {
+    const dataVenda = new Date().toISOString().split('T')[0];
+    const local = formCheckout.tipo === 'Entrega' ? `Andar ${formCheckout.andar} - Setor: ${formCheckout.setor}` : 'Retirada no Local';
+    const obsFinal = `[SITE] ${local} | Obs: ${formCheckout.observacao}`;
+
+    const promessasVenda = cart.map(item => {
+      return supabase.from('vendas').insert([{
+        cliente: formCheckout.nome,
+        data_venda: dataVenda,
+        prod_key: item.produto.id.toString(),
+        produto_nome: `${item.produto.nome} (${item.tamanho})`,
+        preco_unitario: item.produto.preco,
+        custo_unitario: item.produto.custo,
+        quantidade: item.quantidade,
+        valor_total: item.produto.preco * item.quantidade,
+        valor_pago: 0, 
+        custo_total: item.produto.custo * item.quantidade,
+        status: 'ENCOMENDA',
+        observacao: obsFinal
+      }]);
+    });
+
+    if (formCheckout.nome && formCheckout.whatsapp) {
+      await supabase.from('clientes').insert([{ nome: formCheckout.nome, telefone: formCheckout.whatsapp }]);
+    }
+
+    await Promise.all(promessasVenda);
+
+    let msg = `🩵 *NOVO PEDIDO - ESTILO INVERNAL*\n\n`;
+    msg += `👤 *Cliente:* ${formCheckout.nome}\n`;
+    msg += `📞 *Telefone:* ${formCheckout.whatsapp}\n`;
+    msg += `📍 *Entrega:* ${local}\n\n`;
+    msg += `📦 *Pedido:*\n`;
+    
+    cart.forEach(item => {
+      msg += `• ${item.quantidade}x ${item.produto.nome} (${item.tamanho}) - ${formatCurrency(item.produto.preco * item.quantidade)}\n`;
+    });
+
+    msg += `\n💰 *Total:* ${formatCurrency(cartTotal)}\n`;
+    msg += `💳 *Pagamento via PIX.*\n`;
+    if (formCheckout.observacao) msg += `📝 *Obs:* ${formCheckout.observacao}\n`;
+
+    setCart([]);
+    setIsCheckoutOpen(false);
+    setCheckoutStep(1);
+    
+    const url = `https://wa.me/5551999279904?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+  };
+
+  const copiarPix = () => {
+    navigator.clipboard.writeText("viihbarbosa2002@gmail.com");
+    alert("Chave PIX copiada com sucesso!");
+  };
+
+  const renderLoja = () => {
+    const produtosAtivos = produtos.filter(p => p.ativo);
+
+    return (
+      <div style={{ backgroundColor: '#F4FAFD', minHeight: '100vh', fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+        {/* Navbar Loja */}
+        <header style={{ backgroundColor: '#87CEEB', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ fontSize: '28px' }}>🩵</div>
+            <h1 style={{ margin: 0, color: 'white', fontSize: '1.5rem', fontWeight: 'bold', textShadow: '1px 1px 2px rgba(0,0,0,0.1)' }}>Estilo Invernal</h1>
+          </div>
+          <button onClick={() => setIsCartOpen(true)} style={{ background: 'white', border: 'none', padding: '10px 15px', borderRadius: '20px', color: '#0056b3', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+            🛒 <span style={{ background: '#0056b3', color: 'white', borderRadius: '50%', padding: '2px 8px', fontSize: '0.8rem' }}>{cart.length}</span>
+          </button>
+        </header>
+
+        {/* Banner */}
+        <div style={{ background: 'linear-gradient(135deg, #00BFFF 0%, #87CEEB 100%)', padding: '40px 20px', textAlign: 'center', color: 'white' }}>
+          <h2 style={{ fontSize: '2rem', margin: '0 0 10px 0', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>❄️ ESTILO INVERNAL</h2>
+          <p style={{ fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6', textShadow: '1px 1px 2px rgba(0,0,0,0.1)' }}>Conforto, estilo e muito mais quentinho para o seu inverno! Entrega no seu setor! 🩵</p>
+        </div>
+
+        {/* Catálogo */}
+        <div style={{ padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+          <h3 style={{ textAlign: 'center', color: '#0056b3', marginBottom: '30px', fontSize: '1.8rem' }}>Nosso Catálogo</h3>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '25px' }}>
+            {produtosAtivos.length === 0 ? <p style={{textAlign: 'center', width: '100%', color: '#666'}}>Carregando produtos...</p> : null}
+            
+            {produtosAtivos.map(p => {
+              const disponivel = p.estoque_atual > 0;
+              const tamanhos = determinarTamanhos(p.nome);
+              
+              return (
+                <div key={p.id} style={{ background: 'white', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 5px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ height: '200px', background: '#E3F2FD', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #eee' }}>
+                    <span style={{ fontSize: '4rem' }}>{p.nome.toLowerCase().includes('ceroula') ? '👖' : '🧦'}</span>
+                  </div>
+                  
+                  <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: '#333', fontSize: '1.2rem' }}>{p.nome}</h4>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#0056b3', marginBottom: '15px' }}>{formatCurrency(p.preco)}</div>
+                    
+                    <div style={{ marginBottom: '15px' }}>
+                      <label style={{ fontSize: '0.85rem', color: '#666', display: 'block', marginBottom: '5px' }}>Tamanho:</label>
+                      <select 
+                        className="form-control" 
+                        value={tamanhosSelecionados[p.id] || tamanhos[0]} 
+                        onChange={(e) => setTamanhosSelecionados({...tamanhosSelecionados, [p.id]: e.target.value})}
+                        style={{ border: '1px solid #87CEEB', borderRadius: '8px' }}
+                      >
+                        {tamanhos.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+
+                    <div style={{ marginTop: 'auto' }}>
+                      {disponivel ? (
+                        <button 
+                          onClick={() => handleAddToCart(p)} 
+                          style={{ width: '100%', background: '#00BFFF', color: 'white', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0, 191, 255, 0.3)' }}
+                        >
+                          Adicionar ao Carrinho
+                        </button>
+                      ) : (
+                        <button disabled style={{ width: '100%', background: '#e9ecef', color: '#999', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold' }}>
+                          Esgotado
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Rodapé Loja */}
+        <footer style={{ textAlign: 'center', padding: '30px 20px', color: '#888', borderTop: '1px solid #ddd', marginTop: '40px' }}>
+          <p>© {new Date().getFullYear()} Estilo Invernal.</p>
+          <button onClick={() => setShowAdminLogin(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', marginTop: '10px' }}>🔒 Área do Vendedor</button>
+        </footer>
+
+        {/* Modal Carrinho */}
+        {isCartOpen && (
+          <div className="modal-overlay" onClick={() => setIsCartOpen(false)} style={{ zIndex: 1000 }}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', height: '100%', position: 'fixed', right: 0, top: 0, margin: 0, borderRadius: '20px 0 0 20px', animation: 'slideRight 0.3s ease', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '15px' }}>
+                <h2 style={{ margin: 0, color: '#0056b3' }}>Seu Carrinho</h2>
+                <button onClick={() => setIsCartOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>✖</button>
+              </div>
+
+              <div style={{ flexGrow: 1, overflowY: 'auto', padding: '20px 0' }}>
+                {cart.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#999', marginTop: '50px' }}>🛒 Seu carrinho está vazio.</div>
+                ) : (
+                  cart.map((item, index) => (
+                    <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: '#F4FAFD', padding: '10px', borderRadius: '8px' }}>
+                      <div>
+                        <strong style={{ display: 'block', color: '#333' }}>{item.produto.nome}</strong>
+                        <span style={{ fontSize: '0.8rem', color: '#666' }}>Tamanho: {item.tamanho} | {formatCurrency(item.produto.preco)}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <select 
+                          value={item.quantidade} 
+                          onChange={(e) => {
+                            const newCart = [...cart];
+                            newCart[index].quantidade = parseInt(e.target.value);
+                            setCart(newCart);
+                          }}
+                          style={{ padding: '5px', borderRadius: '5px', border: '1px solid #ccc' }}
+                        >
+                          {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <button onClick={() => setCart(cart.filter((_, i) => i !== index))} style={{ background: '#ffcccc', border: 'none', color: '#cc0000', padding: '5px 8px', borderRadius: '5px', cursor: 'pointer' }}>🗑️</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {cart.length > 0 && (
+                <div style={{ borderTop: '1px solid #eee', paddingTop: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '15px', color: '#333' }}>
+                    <span>Total:</span>
+                    <span style={{ color: '#0056b3' }}>{formatCurrency(cartTotal)}</span>
+                  </div>
+                  <button onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} style={{ width: '100%', background: '#00BFFF', color: 'white', border: 'none', padding: '15px', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    Finalizar Pedido
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal Checkout */}
+        {isCheckoutOpen && (
+          <div className="modal-overlay" onClick={() => setIsCheckoutOpen(false)} style={{ zIndex: 1000 }}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+              <button className="close-modal" onClick={() => setIsCheckoutOpen(false)}>✖</button>
+              
+              {checkoutStep === 1 && (
+                <>
+                  <h2 style={{ color: '#0056b3', marginTop: 0 }}>📝 Dados da Entrega</h2>
+                  <form onSubmit={(e) => { e.preventDefault(); setCheckoutStep(2); }}>
+                    <div className="form-group"><label>Nome Completo *</label><input type="text" name="nome" className="form-control" value={formCheckout.nome} onChange={handleCheckoutChange} required /></div>
+                    <div className="form-group"><label>WhatsApp *</label><input type="text" name="whatsapp" className="form-control" placeholder="(51) 9..." value={formCheckout.whatsapp} onChange={handleCheckoutChange} required /></div>
+                    <div className="form-group">
+                      <label>Como deseja receber?</label>
+                      <div style={{ display: 'flex', gap: '15px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><input type="radio" name="tipo" value="Entrega" checked={formCheckout.tipo === 'Entrega'} onChange={handleCheckoutChange} /> Entrega no Setor</label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><input type="radio" name="tipo" value="Retirada" checked={formCheckout.tipo === 'Retirada'} onChange={handleCheckoutChange} /> Retirar Pessoalmente</label>
+                      </div>
+                    </div>
+                    {formCheckout.tipo === 'Entrega' && (
+                      <div className="form-row">
+                        <div className="form-group"><label>Andar *</label>
+                          <select name="andar" className="form-control" value={formCheckout.andar} onChange={handleCheckoutChange} required>
+                            {Array.from({length: 21}, (_, i) => String(i + 1).padStart(2, '0')).map(n => <option key={n} value={n}>Andar {n}</option>)}
+                          </select>
+                        </div>
+                        <div className="form-group"><label>Setor *</label><input type="text" name="setor" className="form-control" placeholder="Ex: RH..." value={formCheckout.setor} onChange={handleCheckoutChange} required /></div>
+                      </div>
+                    )}
+                    <div className="form-group"><label>Observações (Opcional)</label><textarea name="observacao" className="form-control" rows="2" value={formCheckout.observacao} onChange={handleCheckoutChange}></textarea></div>
+                    <button type="submit" style={{ width: '100%', background: '#00BFFF', color: 'white', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', marginTop: '10px' }}>Ir para Pagamento</button>
+                  </form>
+                </>
+              )}
+
+              {checkoutStep === 2 && (
+                <div style={{ textAlign: 'center' }}>
+                  <h2 style={{ color: '#0056b3', marginTop: 0 }}>💳 Pagamento PIX</h2>
+                  <p style={{ color: '#555', marginBottom: '20px' }}>Pague com segurança. O seu pedido será confirmado automaticamente no WhatsApp.</p>
+                  <div style={{ background: '#F4FAFD', padding: '20px', borderRadius: '12px', border: '1px dashed #87CEEB', marginBottom: '20px' }}>
+                    <div style={{ fontSize: '1.1rem', color: '#333' }}>Total a pagar:</div>
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#28a745', margin: '10px 0' }}>{formatCurrency(cartTotal)}</div>
+                    <p style={{ margin: '15px 0 5px 0', fontSize: '0.9rem', color: '#666' }}>Chave PIX (E-mail):</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'white', padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }}>
+                      <code style={{ flexGrow: 1, fontSize: '1.1rem', color: '#333' }}>viihbarbosa2002@gmail.com</code>
+                      <button onClick={copiarPix} style={{ background: '#0056b3', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' }}>Copiar</button>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => setCheckoutStep(1)} style={{ flex: 1, background: '#e9ecef', color: '#333', border: 'none', padding: '15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Voltar</button>
+                    <button onClick={finalizarPedidoVitrine} style={{ flex: 2, background: '#28a745', color: 'white', border: 'none', padding: '15px', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer' }}>✅ Já Realizei o Pagamento</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ==========================================
+  // INDICADORES GERAIS E CÁLCULOS DO ADMIN
   // ==========================================
   const trintaDiasAtras = new Date(); trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
   const dataLimite = trintaDiasAtras.toISOString().split('T')[0];
@@ -447,6 +738,30 @@ export default function App() {
 
   const listaFidelidadeAlertas = obterAlertasFidelidade();
 
+  // ==========================================
+  // RENDERIZAÇÃO PRINCIPAL (INTERCEPTADOR)
+  // ==========================================
+  if (!session) {
+    if (!showAdminLogin) {
+      return renderLoja();
+    }
+    
+    return (
+      <div className="login-container">
+        <form className="login-form" onSubmit={handleLogin}>
+          <img src="/logo.png" alt="Logo" style={{ width: '80px', margin: '0 auto 20px', display: 'block', borderRadius: '12px' }} />
+          <h2 style={{ textAlign: 'center', marginBottom: '20px', color: '#2c3e50' }}>Gestão Vendas Vitória</h2>
+          {loginError && <p className="error-msg">{loginError}</p>}
+          <input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required className="form-control" />
+          <input type="password" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} required className="form-control" />
+          <button type="submit" className="btn-primary w-100">Entrar no Painel</button>
+          <button type="button" onClick={() => setShowAdminLogin(false)} style={{ background: 'transparent', color: '#0056b3', marginTop: '15px', border: 'none', cursor: 'pointer', width: '100%', fontWeight: 'bold' }}>← Voltar para a Loja Virtual</button>
+        </form>
+      </div>
+    );
+  }
+
+  // CÓDIGO ABAIXO PERTENCE EXATAMENTE AO SEU BACKUP (PAINEL ADMIN)
   return (
     <div className="container">
       {/* SIDEBAR (MENU) */}
