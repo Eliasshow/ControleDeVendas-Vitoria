@@ -49,7 +49,7 @@ export default function App() {
   const [dataFimFiltro, setDataFimFiltro] = useState('');
   const [filtroAtivo, setFiltroAtivo] = useState(false);
   const [filtroFiadoAtrasado, setFiltroFiadoAtrasado] = useState(false);
-  const [vendasSelecionadas, setVendasSelecionadas] = useState([]); // NOVO: Guarda os IDs das vendas "ticadas"
+  const [vendasSelecionadas, setVendasSelecionadas] = useState([]); 
   
   // --- FILTROS DO BI (RAIO-X DE CLIENTE) ---
   const [biClienteNome, setBiClienteNome] = useState('');
@@ -68,8 +68,9 @@ export default function App() {
   const [isProdutoModalOpen, setIsProdutoModalOpen] = useState(false);
   const [produtoEditando, setProdutoEditando] = useState(null);
   const [formProduto, setFormProduto] = useState({
-    nome: '', preco: '', custo: '', estoque_atual: '', estoque_minimo: 5, categoria: '', ativo: true
+    nome: '', preco: '', custo: '', estoque_atual: '', estoque_minimo: 5, categoria: '', ativo: true, imagem_url: '' 
   });
+  const [imagemArquivo, setImagemArquivo] = useState(null); 
 
   const [isClienteModalOpen, setIsClienteModalOpen] = useState(false);
   const [clienteEditando, setClienteEditando] = useState(null);
@@ -90,7 +91,7 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-    fetchProdutos(); // Garante que os produtos carreguem na vitrine antes mesmo do login
+    fetchProdutos(); 
   }, []);
 
   useEffect(() => {
@@ -202,7 +203,6 @@ export default function App() {
     if (window.confirm("Tem certeza que deseja excluir esta venda?")) { 
       await supabase.from('vendas').delete().eq('id', id); 
       fetchVendas(); 
-      // Remove da seleção caso tenha sido deletado
       setVendasSelecionadas(prev => prev.filter(item => item !== id));
     }
   };
@@ -221,11 +221,8 @@ export default function App() {
     window.open(url, '_blank');
   };
 
-  // --- LÓGICA DE SELEÇÃO DE VENDAS ---
   const handleToggleSelecao = (id) => {
-    setVendasSelecionadas(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+    setVendasSelecionadas(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
   // ==========================================
@@ -378,19 +375,55 @@ export default function App() {
   };
 
   // ==========================================
-  // LÓGICA DE PRODUTOS E CLIENTES
+  // LÓGICA DE PRODUTOS E UPLOAD DE IMAGEM
   // ==========================================
   const handleProdutoFormChange = (e) => { const { name, value, type, checked } = e.target; setFormProduto(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value })); };
+  
   const handleSaveProduto = async (e) => {
     e.preventDefault();
-    const dbProd = { nome: formProduto.nome, preco: Number(formProduto.preco.toString().replace(',','.')), custo: Number(formProduto.custo.toString().replace(',','.')), estoque_atual: Number(formProduto.estoque_atual), estoque_minimo: Number(formProduto.estoque_minimo), categoria: formProduto.categoria || 'Geral', ativo: formProduto.ativo };
+    let finalImageUrl = formProduto.imagem_url;
+
+    if (imagemArquivo) {
+      const fileExt = imagemArquivo.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const { data, error } = await supabase.storage.from('produtos').upload(fileName, imagemArquivo);
+      
+      if (!error && data) {
+        const { data: urlData } = supabase.storage.from('produtos').getPublicUrl(fileName);
+        finalImageUrl = urlData.publicUrl;
+      } else {
+        alert("Erro ao enviar a imagem. Verifique se configurou a política 'Permitir tudo' no bucket 'produtos' no Supabase.");
+      }
+    }
+
+    const dbProd = { 
+      nome: formProduto.nome, 
+      preco: Number(formProduto.preco.toString().replace(',','.')), 
+      custo: Number(formProduto.custo.toString().replace(',','.')), 
+      estoque_atual: Number(formProduto.estoque_atual), 
+      estoque_minimo: Number(formProduto.estoque_minimo), 
+      categoria: formProduto.categoria || 'Geral', 
+      ativo: formProduto.ativo,
+      imagem_url: finalImageUrl 
+    };
+    
     if (produtoEditando) { await supabase.from('produtos').update(dbProd).eq('id', produtoEditando.id); } else { await supabase.from('produtos').insert([dbProd]); }
     await fetchProdutos(); handleCloseProdutoModal();
   };
-  const handleEditProduto = (p) => { setProdutoEditando(p); setFormProduto({ nome: p.nome, preco: p.preco, custo: p.custo, estoque_atual: p.estoque_atual, estoque_minimo: p.estoque_minimo, category: p.categoria || '', ativo: p.ativo }); setIsProdutoModalOpen(true); };
+
+  const handleEditProduto = (p) => { 
+    setProdutoEditando(p); 
+    setFormProduto({ 
+      nome: p.nome, preco: p.preco, custo: p.custo, estoque_atual: p.estoque_atual, estoque_minimo: p.estoque_minimo, category: p.categoria || '', ativo: p.ativo,
+      imagem_url: p.imagem_url || '' 
+    }); 
+    setImagemArquivo(null); 
+    setIsProdutoModalOpen(true); 
+  };
+  
   const handleToggleAtivo = async (p) => { await supabase.from('produtos').update({ ativo: !p.ativo }).eq('id', p.id); await fetchProdutos(); };
   const handleDeleteProduto = async (id) => { if (window.confirm("Atenção: Tem certeza que deseja excluir DE VEZ este produto?")) { await supabase.from('produtos').delete().eq('id', id); await fetchProdutos(); } };
-  const handleCloseProdutoModal = () => { setIsProdutoModalOpen(false); setProdutoEditando(null); setFormProduto({ nome: '', preco: '', custo: '', estoque_atual: '', estoque_minimo: 5, categoria: '', ativo: true }); };
+  const handleCloseProdutoModal = () => { setIsProdutoModalOpen(false); setProdutoEditando(null); setImagemArquivo(null); setFormProduto({ nome: '', preco: '', custo: '', estoque_atual: '', estoque_minimo: 5, categoria: '', ativo: true, imagem_url: '' }); };
 
   const handleClienteFormChange = (e) => { setFormCliente({ ...formCliente, [e.target.name]: e.target.value }); };
   const handleSaveCliente = async (e) => {
@@ -458,19 +491,19 @@ export default function App() {
 
     await Promise.all(promessasVenda);
 
-    let msg = `🩵 *NOVO PEDIDO - ESTILO INVERNAL*\n\n`;
-    msg += `👤 *Cliente:* ${formCheckout.nome}\n`;
-    msg += `📞 *Telefone:* ${formCheckout.whatsapp}\n`;
-    msg += `📍 *Entrega:* ${local}\n\n`;
-    msg += `📦 *Pedido:*\n`;
+    let msg = `NOVO PEDIDO - ESTILO INVERNAL\n\n`;
+    msg += `Cliente: ${formCheckout.nome}\n`;
+    msg += `Telefone: ${formCheckout.whatsapp}\n`;
+    msg += `Entrega: ${local}\n\n`;
+    msg += `Pedido:\n`;
     
     cart.forEach(item => {
-      msg += `• ${item.quantidade}x ${item.produto.nome} (${item.tamanho}) - ${formatCurrency(item.produto.preco * item.quantidade)}\n`;
+      msg += `- ${item.quantidade}x ${item.produto.nome} (${item.tamanho}) = ${formatCurrency(item.produto.preco * item.quantidade)}\n`;
     });
 
-    msg += `\n💰 *Total:* ${formatCurrency(cartTotal)}\n`;
-    msg += `💳 *Pagamento via PIX.*\n`;
-    if (formCheckout.observacao) msg += `📝 *Obs:* ${formCheckout.observacao}\n`;
+    msg += `\nTotal: ${formatCurrency(cartTotal)}\n`;
+    msg += `Pagamento: PIX\n`;
+    if (formCheckout.observacao) msg += `Observação: ${formCheckout.observacao}\n`;
 
     setCart([]);
     setIsCheckoutOpen(false);
@@ -493,7 +526,7 @@ export default function App() {
         {/* Navbar Loja */}
         <header style={{ backgroundColor: '#87CEEB', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ fontSize: '28px' }}>🩵</div>
+            <img src="/logo.png" alt="Logo" style={{ width: '40px', borderRadius: '8px' }} />
             <h1 style={{ margin: 0, color: 'white', fontSize: '1.5rem', fontWeight: 'bold', textShadow: '1px 1px 2px rgba(0,0,0,0.1)' }}>Estilo Invernal</h1>
           </div>
           <button onClick={() => setIsCartOpen(true)} style={{ background: 'white', border: 'none', padding: '10px 15px', borderRadius: '20px', color: '#0056b3', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
@@ -504,10 +537,10 @@ export default function App() {
         {/* Banner */}
         <div style={{ background: 'linear-gradient(135deg, #00BFFF 0%, #87CEEB 100%)', padding: '40px 20px', textAlign: 'center', color: 'white' }}>
           <h2 style={{ fontSize: '2rem', margin: '0 0 10px 0', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>❄️ ESTILO INVERNAL</h2>
-          <p style={{ fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6', textShadow: '1px 1px 2px rgba(0,0,0,0.1)' }}>Conforto, estilo e muito mais quentinho para o seu inverno! Entrega no seu setor! 🩵</p>
+          <p style={{ fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6', textShadow: '1px 1px 2px rgba(0,0,0,0.1)' }}>Conforto, estilo e muito mais quentinho para o seu inverno! Entrega no seu setor!</p>
         </div>
 
-        {/* Catálogo */}
+        {/* Catálogo com FOTOS REAIS */}
         <div style={{ padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
           <h3 style={{ textAlign: 'center', color: '#0056b3', marginBottom: '30px', fontSize: '1.8rem' }}>Nosso Catálogo</h3>
           
@@ -520,8 +553,14 @@ export default function App() {
               
               return (
                 <div key={p.id} style={{ background: 'white', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 5px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ height: '200px', background: '#E3F2FD', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #eee' }}>
-                    <span style={{ fontSize: '4rem' }}>{p.nome.toLowerCase().includes('ceroula') ? '👖' : '🧦'}</span>
+                  
+                  {/* FOTO DO PRODUTO (Sempre quadrada e alinhada) */}
+                  <div style={{ height: '250px', background: '#E3F2FD', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #eee', overflow: 'hidden' }}>
+                    {p.imagem_url ? (
+                      <img src={p.imagem_url} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ fontSize: '4rem' }}>{p.nome.toLowerCase().includes('ceroula') ? '👖' : '🧦'}</span>
+                    )}
                   </div>
                   
                   <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
@@ -658,8 +697,12 @@ export default function App() {
               {checkoutStep === 2 && (
                 <div style={{ textAlign: 'center' }}>
                   <h2 style={{ color: '#0056b3', marginTop: 0 }}>💳 Pagamento PIX</h2>
-                  <p style={{ color: '#555', marginBottom: '20px' }}>Pague com segurança. O seu pedido será confirmado automaticamente no WhatsApp.</p>
+                  <p style={{ color: '#555', marginBottom: '20px' }}>Escaneie o QR Code ou copie a chave PIX. O seu pedido será confirmado automaticamente no WhatsApp.</p>
                   <div style={{ background: '#F4FAFD', padding: '20px', borderRadius: '12px', border: '1px dashed #87CEEB', marginBottom: '20px' }}>
+                    
+                    {/* QR CODE AQUI */}
+                    <img src="/qrcode-pix.jpeg" alt="QR Code PIX" style={{ maxWidth: '100%', maxHeight: '250px', borderRadius: '10px', marginBottom: '15px' }} />
+                    
                     <div style={{ fontSize: '1.1rem', color: '#333' }}>Total a pagar:</div>
                     <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#28a745', margin: '10px 0' }}>{formatCurrency(cartTotal)}</div>
                     <p style={{ margin: '15px 0 5px 0', fontSize: '0.9rem', color: '#666' }}>Chave PIX (E-mail):</p>
@@ -738,6 +781,22 @@ export default function App() {
 
   const listaFidelidadeAlertas = obterAlertasFidelidade();
 
+  // --- NOVO: LÓGICA DE FECHAMENTO DE CAIXA MENSAL ---
+  const agrupadoPorMes = vendas.reduce((acc, v) => {
+    const mesAno = v.data_venda.substring(0, 7); // Formato: "YYYY-MM"
+    if (!acc[mesAno]) acc[mesAno] = { faturamento: 0, custo: 0, lucro: 0, fiado: 0 };
+    
+    if (v.status === 'PAGO') {
+       acc[mesAno].faturamento += Number(v.valor_total);
+       acc[mesAno].custo += Number(v.custo_total);
+       acc[mesAno].lucro += (Number(v.valor_total) - Number(v.custo_total));
+    } else if (v.status === 'FIADO') {
+       acc[mesAno].fiado += Number(v.valor_total);
+    }
+    return acc;
+  }, {});
+  const historicoFechamento = Object.entries(agrupadoPorMes).map(([mes, dados]) => ({ mes, ...dados })).sort((a,b) => b.mes.localeCompare(a.mes));
+
   // ==========================================
   // RENDERIZAÇÃO PRINCIPAL (INTERCEPTADOR)
   // ==========================================
@@ -761,7 +820,6 @@ export default function App() {
     );
   }
 
-  // CÓDIGO ABAIXO PERTENCE EXATAMENTE AO SEU BACKUP (PAINEL ADMIN)
   return (
     <div className="container">
       {/* SIDEBAR (MENU) */}
@@ -775,6 +833,10 @@ export default function App() {
               <button className={`btn ${paginaAtual === 'estoque' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setPaginaAtual('estoque'); setIsSidebarOpen(false); }} style={{ textAlign: 'left', padding: '12px' }}>📦 Controle de Estoque</button>
               <button className={`btn ${paginaAtual === 'clientes' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setPaginaAtual('clientes'); setIsSidebarOpen(false); }} style={{ textAlign: 'left', padding: '12px' }}>👥 Cadastro de Clientes</button>
               <button className={`btn ${paginaAtual === 'dashboard' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setPaginaAtual('dashboard'); setIsSidebarOpen(false); }} style={{ textAlign: 'left', padding: '12px' }}>📊 Dashboard (BI)</button>
+              
+              {/* NOVO BOTÃO DE FECHAMENTO */}
+              <button className={`btn ${paginaAtual === 'fechamento' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setPaginaAtual('fechamento'); setIsSidebarOpen(false); }} style={{ textAlign: 'left', padding: '12px', background: paginaAtual === 'fechamento' ? '#007bff' : '#e2e8f0', color: paginaAtual === 'fechamento' ? 'white' : '#333' }}>📅 Fechamento de Caixa</button>
+
               <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #eee' }}><button className="btn btn-danger" style={{ width: '100%' }} onClick={handleLogout}>Sair do Sistema</button></div>
             </div>
           </div>
@@ -838,7 +900,7 @@ export default function App() {
           <div className="table-section" style={{ width: '100%', marginBottom: '100px' }}>
             <h2 style={{ marginBottom: '15px', color: '#2c3e50' }}>Histórico de Vendas</h2>
             
-            {/* NOVO: PAINEL DE SELEÇÃO DINÂMICO */}
+            {/* PAINEL DE SELEÇÃO DINÂMICO */}
             {vendasSelecionadas.length > 0 && (
               <div style={{ background: '#e3f2fd', border: '1px solid #b8daff', padding: '15px', borderRadius: '8px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', animation: 'fadeIn 0.3s ease-in' }}>
                  <div>
@@ -1104,6 +1166,52 @@ export default function App() {
         </div>
       )}
 
+      {/* ======================= PÁGINA 5: FECHAMENTO DE CAIXA ======================= */}
+      {paginaAtual === 'fechamento' && (
+        <div style={{ marginBottom: '100px' }}>
+          <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>📅 Fechamento de Caixa Mensal</h2>
+          
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {historicoFechamento.length === 0 ? (
+              <p style={{ color: '#666' }}>Ainda não há dados suficientes para o fechamento de caixa.</p>
+            ) : (
+              historicoFechamento.map(mes => {
+                const partesMes = mes.mes.split('-');
+                const nomeMes = new Date(partesMes[0], partesMes[1] - 1, 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+                
+                return (
+                  <div key={mes.mes} style={{ background: 'white', padding: '20px', borderRadius: '12px', borderLeft: '6px solid #007bff', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#333', textTransform: 'capitalize' }}>{nomeMes}</h3>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                      <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#666', display: 'block' }}>Faturamento Bruto</span>
+                        <strong style={{ fontSize: '1.2rem', color: '#333' }}>{formatCurrency(mes.faturamento)}</strong>
+                      </div>
+                      
+                      <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#666', display: 'block' }}>Custo (Estoque Reposto)</span>
+                        <strong style={{ fontSize: '1.2rem', color: '#dc3545' }}>{formatCurrency(mes.custo)}</strong>
+                      </div>
+                      
+                      <div style={{ background: '#e2f0d9', padding: '15px', borderRadius: '8px', border: '1px solid #c3e6cb' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#155724', display: 'block' }}>Lucro Líquido Real</span>
+                        <strong style={{ fontSize: '1.3rem', color: '#28a745' }}>{formatCurrency(mes.lucro)}</strong>
+                      </div>
+                      
+                      <div style={{ background: '#fff3cd', padding: '15px', borderRadius: '8px', border: '1px solid #ffeeba' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#856404', display: 'block' }}>Fiado Pendente</span>
+                        <strong style={{ fontSize: '1.2rem', color: '#856404' }}>{formatCurrency(mes.fiado)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+
       {/* --- MODAIS DE INSERÇÃO --- */}
       
       {/* Venda */}
@@ -1161,6 +1269,20 @@ export default function App() {
             <h2 style={{ marginTop: 0 }}>{produtoEditando ? 'Editar Produto' : 'Novo Produto'}</h2>
             <form onSubmit={handleSaveProduto} style={{ marginTop: '20px' }}>
               <div className="form-group"><label>Nome do Produto</label><input type="text" name="nome" className="form-control" value={formProduto.nome} onChange={handleProdutoFormChange} required /></div>
+              
+              {/* CAMPO DE UPLOAD DE IMAGEM */}
+              <div className="form-group">
+                <label>Foto do Produto (Upload para o Site)</label>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="form-control" 
+                  onChange={(e) => setImagemArquivo(e.target.files[0])} 
+                  style={{ padding: '8px' }} 
+                />
+                {formProduto.imagem_url && !imagemArquivo && <small style={{color: '#28a745', display: 'block', marginTop: '5px'}}>✅ Este produto já possui uma imagem salva.</small>}
+              </div>
+
               <div className="form-row">
                 <div className="form-group"><label>Preço Venda (R$)</label><input type="number" step="0.01" name="preco" className="form-control" value={formProduto.preco} onChange={handleProdutoFormChange} required /></div>
                 <div className="form-group"><label>Custo (R$)</label><input type="number" step="0.01" name="custo" className="form-control" value={formProduto.custo} onChange={handleProdutoFormChange} required /></div>
