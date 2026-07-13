@@ -86,6 +86,7 @@ export default function App() {
   const [formCheckout, setFormCheckout] = useState({
     nome: '', whatsapp: '', tipo: 'Entrega', andar: '01', setor: '', observacao: ''
   });
+  const [imagemAmpliada, setImagemAmpliada] = useState(null); // NOVO: Controla a imagem que abre em tela cheia
 
   // --- AUTENTICAÇÃO E TEMPO REAL ---
   useEffect(() => {
@@ -231,7 +232,6 @@ export default function App() {
   const handleGerarRecibo = async (venda) => {
     try {
       const doc = new jsPDF();
-      
       const logoBase64 = await carregarImagemBase64('/logo.png');
 
       if (logoBase64) {
@@ -523,6 +523,7 @@ export default function App() {
 
     return (
       <div style={{ backgroundColor: '#F4FAFD', minHeight: '100vh', fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+        
         {/* Navbar Loja */}
         <header style={{ backgroundColor: '#87CEEB', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -540,7 +541,7 @@ export default function App() {
           <p style={{ fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6', textShadow: '1px 1px 2px rgba(0,0,0,0.1)' }}>Conforto, estilo e muito mais quentinho para o seu inverno! Entrega no seu setor!</p>
         </div>
 
-        {/* Catálogo com FOTOS REAIS */}
+        {/* Catálogo com FOTOS REAIS (Corrigido para Contain) */}
         <div style={{ padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
           <h3 style={{ textAlign: 'center', color: '#0056b3', marginBottom: '30px', fontSize: '1.8rem' }}>Nosso Catálogo</h3>
           
@@ -554,10 +555,15 @@ export default function App() {
               return (
                 <div key={p.id} style={{ background: 'white', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 5px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
                   
-                  {/* FOTO DO PRODUTO (Sempre quadrada e alinhada) */}
-                  <div style={{ height: '250px', background: '#E3F2FD', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #eee', overflow: 'hidden' }}>
+                  {/* FOTO DO PRODUTO (Toda visível, clicável para Zoom) */}
+                  <div style={{ height: '220px', background: '#E3F2FD', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #eee', overflow: 'hidden' }}>
                     {p.imagem_url ? (
-                      <img src={p.imagem_url} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img 
+                        src={p.imagem_url} 
+                        alt={p.nome} 
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'zoom-in' }} 
+                        onClick={() => setImagemAmpliada(p.imagem_url)}
+                      />
                     ) : (
                       <span style={{ fontSize: '4rem' }}>{p.nome.toLowerCase().includes('ceroula') ? '👖' : '🧦'}</span>
                     )}
@@ -605,6 +611,16 @@ export default function App() {
           <p>© {new Date().getFullYear()} Estilo Invernal.</p>
           <button onClick={() => setShowAdminLogin(true)} style={{ background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', marginTop: '10px' }}>🔒 Área do Vendedor</button>
         </footer>
+
+        {/* ================= MODAL LUPA / ZOOM DA IMAGEM ================= */}
+        {imagemAmpliada && (
+          <div className="modal-overlay" onClick={() => setImagemAmpliada(null)} style={{ zIndex: 2000, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+              <button onClick={() => setImagemAmpliada(null)} style={{ position: 'absolute', top: '-40px', right: '0', background: 'none', color: 'white', border: 'none', fontSize: '2rem', cursor: 'pointer' }}>✖</button>
+              <img src={imagemAmpliada} alt="Zoom Produto" style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px' }} onClick={(e) => e.stopPropagation()} />
+            </div>
+          </div>
+        )}
 
         {/* Modal Carrinho */}
         {isCartOpen && (
