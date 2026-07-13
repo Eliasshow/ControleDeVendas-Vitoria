@@ -44,11 +44,12 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState('vendas'); 
   
-  // --- FILTROS DE VENDA ---
+  // --- FILTROS E SELEÇÃO DE VENDA ---
   const [dataInicioFiltro, setDataInicioFiltro] = useState('');
   const [dataFimFiltro, setDataFimFiltro] = useState('');
   const [filtroAtivo, setFiltroAtivo] = useState(false);
   const [filtroFiadoAtrasado, setFiltroFiadoAtrasado] = useState(false);
+  const [vendasSelecionadas, setVendasSelecionadas] = useState([]); // NOVO: Guarda os IDs das vendas "ticadas"
   
   // --- FILTROS DO BI (RAIO-X DE CLIENTE) ---
   const [biClienteNome, setBiClienteNome] = useState('');
@@ -186,7 +187,12 @@ export default function App() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Tem certeza que deseja excluir esta venda?")) { await supabase.from('vendas').delete().eq('id', id); fetchVendas(); }
+    if (window.confirm("Tem certeza que deseja excluir esta venda?")) { 
+      await supabase.from('vendas').delete().eq('id', id); 
+      fetchVendas(); 
+      // Remove da seleção caso tenha sido deletado
+      setVendasSelecionadas(prev => prev.filter(item => item !== id));
+    }
   };
 
   const handleCobrarWhatsApp = (venda) => {
@@ -203,6 +209,13 @@ export default function App() {
     window.open(url, '_blank');
   };
 
+  // --- LÓGICA DE SELEÇÃO DE VENDAS ---
+  const handleToggleSelecao = (id) => {
+    setVendasSelecionadas(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
   // ==========================================
   // RECIBO PDF PROFISSIONAL (COM LOGO)
   // ==========================================
@@ -210,10 +223,8 @@ export default function App() {
     try {
       const doc = new jsPDF();
       
-      // Busca a imagem convertida
       const logoBase64 = await carregarImagemBase64('/logo.png');
 
-      // CABEÇALHO COM OU SEM LOGO
       if (logoBase64) {
         doc.addImage(logoBase64, 'PNG', 20, 15, 18, 18);
         doc.setFont("helvetica", "bold");
@@ -232,11 +243,9 @@ export default function App() {
       doc.setTextColor(150, 150, 150);
       doc.text("Recibo Digital de Compra", logoBase64 ? 45 : 105, logoBase64 ? 33 : 33, null, null, logoBase64 ? "left" : "center");
 
-      // LINHA SEPARADORA
       doc.setDrawColor(220, 220, 220);
       doc.line(20, 42, 190, 42);
 
-      // DADOS DO CLIENTE
       doc.setTextColor(60, 60, 60);
       doc.setFontSize(10);
       doc.text("DADOS DO CLIENTE", 20, 55);
@@ -251,10 +260,9 @@ export default function App() {
       doc.setFontSize(12);
       doc.text(formatDateBR(venda.data_venda), 130, 62);
 
-      // CAIXA DE ITENS (ESTILO TABELA)
       doc.setDrawColor(230, 230, 230);
       doc.setFillColor(252, 252, 252);
-      doc.roundedRect(20, 75, 170, 35, 3, 3, 'FD'); // Retângulo com fundo claro
+      doc.roundedRect(20, 75, 170, 35, 3, 3, 'FD'); 
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
@@ -263,7 +271,7 @@ export default function App() {
       doc.text("QTD", 140, 83);
       doc.text("STATUS", 165, 83);
       
-      doc.line(20, 87, 190, 87); // Linha interna
+      doc.line(20, 87, 190, 87); 
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -271,13 +279,11 @@ export default function App() {
       doc.text(venda.produto_nome, 25, 98);
       doc.text(`${venda.quantidade}x`, 140, 98);
       
-      // Cor condicional para o Status no PDF
       if (venda.status === 'PAGO') doc.setTextColor(40, 167, 69);
       else if (venda.status === 'FIADO') doc.setTextColor(220, 53, 69);
       else doc.setTextColor(255, 193, 7);
       doc.text(venda.status, 165, 98);
 
-      // OBSERVAÇÃO
       let yCaixaTotal = 120;
       if (venda.observacao) {
         doc.setTextColor(80, 80, 80);
@@ -286,7 +292,6 @@ export default function App() {
         doc.text(`Observações: ${venda.observacao}`, 25, 107);
       }
 
-      // CAIXA DO VALOR TOTAL
       doc.setFillColor(240, 248, 255);
       doc.roundedRect(20, yCaixaTotal, 170, 25, 3, 3, 'F');
       doc.setFontSize(14);
@@ -298,7 +303,6 @@ export default function App() {
       doc.setFont("helvetica", "bold");
       doc.text(`${formatCurrency(venda.valor_total)}`, 185, yCaixaTotal + 17, null, null, "right");
 
-      // RODAPÉ COM CARIMBO DE TEMPO
       const dataHoraEmissao = new Date().toLocaleString('pt-BR');
       doc.setFontSize(9);
       doc.setFont("helvetica", "italic");
@@ -306,7 +310,6 @@ export default function App() {
       doc.text(`Documento gerado eletronicamente em: ${dataHoraEmissao}`, 105, 275, null, null, "center");
       doc.text("Vendas Vitória - Gestão & Qualidade", 105, 280, null, null, "center");
 
-      // Salva o PDF
       const nomeArquivo = `Recibo_${venda.cliente.replace(/\s+/g, '_')}_${venda.data_venda}.pdf`;
       doc.save(nomeArquivo);
       
@@ -388,7 +391,7 @@ export default function App() {
   const handleCloseClienteModal = () => { setIsClienteModalOpen(false); setClienteEditando(null); setFormCliente({ nome: '', telefone: '' }); };
 
   // ==========================================
-  // INDICADORES GERAIS
+  // INDICADORES GERAIS E CÁLCULOS
   // ==========================================
   const trintaDiasAtras = new Date(); trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
   const dataLimite = trintaDiasAtras.toISOString().split('T')[0];
@@ -415,6 +418,12 @@ export default function App() {
     const ranking = {}; vendasFiltradas.forEach(v => { ranking[v.produto_nome] = (ranking[v.produto_nome] || 0) + Number(v.quantidade); });
     for (const [nome, qtd] of Object.entries(ranking)) { if (qtd > qtdCampeao) { produtoCampeao = nome; qtdCampeao = qtd; } }
   }
+
+  // CÁLCULOS DO LOTE SELECIONADO
+  const dadosSelecionados = vendasFiltradas.filter(v => vendasSelecionadas.includes(v.id));
+  const totalSelecionado = dadosSelecionados.reduce((acc, v) => acc + Number(v.valor_total), 0);
+  const custoSelecionado = dadosSelecionados.reduce((acc, v) => acc + Number(v.custo_total), 0);
+  const lucroSelecionado = totalSelecionado - custoSelecionado;
 
   // --- DADOS PARA O DASHBOARD BI ---
   const vendasPorDia = vendas.reduce((acc, v) => { const dataFormatada = formatDateBR(v.data_venda.substring(0, 10)); acc[dataFormatada] = (acc[dataFormatada] || 0) + Number(v.valor_total); return acc; }, {});
@@ -489,7 +498,7 @@ export default function App() {
               </button>
               
               {(filtroAtivo || filtroFiadoAtrasado) && (
-                <button className="btn btn-secondary" onClick={() => { setFiltroAtivo(false); setDataInicioFiltro(''); setDataFimFiltro(''); setFiltroFiadoAtrasado(false); }}>
+                <button className="btn btn-secondary" onClick={() => { setFiltroAtivo(false); setDataInicioFiltro(''); setDataFimFiltro(''); setFiltroFiadoAtrasado(false); setVendasSelecionadas([]); }}>
                   Limpar Filtros
                 </button>
               )}
@@ -513,15 +522,50 @@ export default function App() {
 
           <div className="table-section" style={{ width: '100%', marginBottom: '100px' }}>
             <h2 style={{ marginBottom: '15px', color: '#2c3e50' }}>Histórico de Vendas</h2>
-            <div className="historico-cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '15px' }}>
-              {vendasFiltradas.map(v => (
-                <div key={v.id} className="venda-card" style={{ background: 'white', borderRadius: '10px', padding: '15px', borderLeft: `5px solid ${v.status === 'PAGO' ? '#28a745' : v.status === 'FIADO' ? '#dc3545' : '#ffc107'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><h3 style={{ margin: 0 }}>{v.cliente}</h3><span className={`badge badge-${v.status.toLowerCase()}`}>{v.status}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 5px 0', color: '#666' }}><span>📅 {formatDateBR(v.data_venda)}</span><span>{v.produto_nome} (x{v.quantidade})</span></div>
-                  
-                  {v.observacao && <p style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', margin: '0 0 10px 0' }}>Obs: {v.observacao}</p>}
+            
+            {/* NOVO: PAINEL DE SELEÇÃO DINÂMICO */}
+            {vendasSelecionadas.length > 0 && (
+              <div style={{ background: '#e3f2fd', border: '1px solid #b8daff', padding: '15px', borderRadius: '8px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', animation: 'fadeIn 0.3s ease-in' }}>
+                 <div>
+                    <h4 style={{ margin: '0 0 5px 0', color: '#0056b3' }}>{vendasSelecionadas.length} Vendas Selecionadas (Calculadora de Lote)</h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', fontSize: '1rem', color: '#333' }}>
+                       <span><strong>Valor Total:</strong> {formatCurrency(totalSelecionado)}</span>
+                       <span style={{ color: '#dc3545' }}><strong>Custo de Reposição:</strong> {formatCurrency(custoSelecionado)}</span>
+                       <span style={{ color: '#28a745' }}><strong>Lucro do Lote:</strong> {formatCurrency(lucroSelecionado)}</span>
+                    </div>
+                 </div>
+                 <button className="btn-sm btn-secondary" onClick={() => setVendasSelecionadas([])}>Limpar Seleção</button>
+              </div>
+            )}
 
-                  {/* BARRA DE AÇÕES COM DESIGN LIMPO E ESPAÇADO */}
+            <div className="historico-cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '15px' }}>
+              {vendasFiltradas.map(v => {
+                const isSelected = vendasSelecionadas.includes(v.id);
+                return (
+                <div key={v.id} className="venda-card" style={{ background: isSelected ? '#f8faff' : 'white', borderRadius: '10px', padding: '15px', borderLeft: `5px solid ${v.status === 'PAGO' ? '#28a745' : v.status === 'FIADO' ? '#dc3545' : '#ffc107'}`, border: isSelected ? '2px solid #007bff' : 'none' }}>
+                  
+                  {/* CABEÇALHO DO CARD COM CHECKBOX */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input 
+                        type="checkbox" 
+                        style={{ transform: 'scale(1.3)', cursor: 'pointer', accentColor: '#007bff' }} 
+                        checked={isSelected} 
+                        onChange={() => handleToggleSelecao(v.id)} 
+                      />
+                      <h3 style={{ margin: 0 }}>{v.cliente}</h3>
+                    </div>
+                    <span className={`badge badge-${v.status.toLowerCase()}`}>{v.status}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 5px 0', color: '#666', paddingLeft: '28px' }}>
+                    <span>📅 {formatDateBR(v.data_venda)}</span>
+                    <span>{v.produto_nome} (x{v.quantidade})</span>
+                  </div>
+                  
+                  {v.observacao && <p style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', margin: '0 0 10px 28px' }}>Obs: {v.observacao}</p>}
+
+                  {/* BARRA DE AÇÕES */}
                   <div style={{ borderTop: '1px solid #eee', paddingTop: '12px', marginTop: '10px' }}>
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -547,7 +591,7 @@ export default function App() {
                   </div>
 
                 </div>
-              ))}
+              )})}
             </div>
           </div>
           <button className="fab-button" onClick={() => setIsModalOpen(true)}>➕</button>
